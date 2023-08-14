@@ -1,4 +1,4 @@
-use framebrush::{Canvas, BLUE, GREEN, RED, RGBu32, YELLOW};
+use framebrush::{Canvas, RGBu32, BLUE, GREEN, RED, YELLOW};
 use rand::{rngs::ThreadRng, Rng};
 use std::{
     f32::consts::FRAC_PI_2,
@@ -117,7 +117,7 @@ impl Asteroid {
             inside_ship |= ship.hitbox.iter().any(|(x, y)| res.contains(*x, *y));
             inside_ship |= res.contains(ship.x, ship.y);
             if !inside_ship {
-                return res
+                return res;
             }
         }
     }
@@ -188,9 +188,8 @@ fn main() {
     let mut pressed_keys = [false; 256];
     let mut prev_pressed_keys = [false; 256];
 
-
     println!(
-r#"Welcome to..
+        r#"Welcome to..
 ... A S T E R O I D S ...
 
 Controls:
@@ -204,7 +203,7 @@ Tips:
     * Your weapon has a pretty long cooldown, only use it when necessary!
     * Asteroids will spawn faster as you progress.
 
-Good luck!"# 
+Good luck!"#
     );
     event_loop.run(move |event, _, control_flow| {
         *control_flow = ControlFlow::WaitUntil(
@@ -238,7 +237,6 @@ Good luck!"#
 
                 if frame_time.as_micros() > min_frame_time {
                     let delta_time = frame_time.as_secs_f32();
-                    
                     if pressed_keys[VirtualKeyCode::Z as usize]
                         && !prev_pressed_keys[VirtualKeyCode::Z as usize] {
                         show_hitbox = !show_hitbox;
@@ -447,7 +445,6 @@ Good luck!"#
                         // (x as usize, y as usize)
                         (x as usize, y as usize)
                     });
-                    
                     for (x0, y0) in ship_transform {
                         for (x1, y1) in ship_transform {
                             canvas.line(x0, y0, x1, y1, &RED);
@@ -458,7 +455,7 @@ Good luck!"#
                         canvas.put(*x as usize, *y as usize, &BLUE)
                     }
 
-                    if show_hitbox {         
+                    if show_hitbox {
                         for (x0, y0) in ship.hitbox {
                             for (x1, y1) in ship.hitbox {
                                 canvas.line(
@@ -471,7 +468,6 @@ Good luck!"#
                             }
                         }
                     }
-                    
                     buffer.present().expect("Couldn't present frame buffer.");
                 }
             }
