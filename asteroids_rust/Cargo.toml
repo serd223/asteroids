@@ -7,5 +7,6 @@ edition = "2021"
 
 [dependencies]
 framebrush = { git = "https://github.com/serd223/framebrush.git" }
+rand = "0.8.5"
 softbuffer = "0.3.0"
 winit = "0.28.6"
