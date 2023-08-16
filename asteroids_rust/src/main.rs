@@ -12,6 +12,8 @@ use winit::{
     window::WindowBuilder,
 };
 
+mod math;
+
 const SCREEN_WIDTH: u32 = 640;
 const SCREEN_HEIGHT: u32 = 576;
 
