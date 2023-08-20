@@ -336,7 +336,7 @@ Good luck!"#
                         b.wrap_count < 5
                     });
 
-                    if asteroids.len() == 0 {
+                    if asteroids.is_empty() {
                         for _ in 0..4 {
                             asteroids.push(Asteroid::random(&mut rng, &ship))
                         }
