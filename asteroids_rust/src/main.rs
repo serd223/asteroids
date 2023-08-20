@@ -1,7 +1,8 @@
-use framebrush::{Canvas, RGBu32, BLUE, GREEN, RED, YELLOW};
+use framebrush::{Canvas, RGBu32, GREEN, RED, YELLOW};
+use math::{vec2, Transform, Vec2};
 use rand::{rngs::ThreadRng, Rng};
 use std::{
-    f32::consts::FRAC_PI_2,
+    f32::consts::{FRAC_PI_2, PI},
     num::NonZeroU32,
     time::{Duration, Instant},
 };
@@ -17,68 +18,55 @@ mod math;
 const SCREEN_WIDTH: u32 = 640;
 const SCREEN_HEIGHT: u32 = 576;
 
-const CANVAS_WIDTH: usize = 160;
-const CANVAS_HEIGHT: usize = 144;
+// Gameboy Resoultion * 2
+const CANVAS_WIDTH: usize = 320;
+const CANVAS_HEIGHT: usize = 288;
 
-const DANGER_ZONE: f32 = (1. / 4.) * (CANVAS_HEIGHT as f32);
+// Gameboy Resolution
+// const CANVAS_WIDTH: usize = 160;
+// const CANVAS_HEIGHT: usize = 144;
 
+const DANGER_ZONE: f32 = (1. / 20.) * (CANVAS_HEIGHT as f32);
 const DEFAULT_ACCELERATION: f32 = 25.;
-const DEFAULT_BULLET_COOLDOWN: u64 = 1900;
-/// cos(x + y) = cos x * cos y - sin x * sin y
-/// sin(x + y) = sin x * cos y + cos x * sin y
-pub fn rotate(x: f32, y: f32, rot: f32) -> (f32, f32) {
-    let (s, c) = rot.sin_cos();
-    (x * c - y * s, y * c + x * s)
-}
-
-pub fn normalise(x: f32, y: f32) -> (f32, f32) {
-    let len = (x * x + y * y).sqrt();
-
-    (x / len, y / len)
-}
+const DEFAULT_BULLET_COOLDOWN: u64 = 1100;
+const BULLET_COLOR: RGBu32 = RGBu32::Rgb(86, 182, 194);
 
 struct Ship {
-    x: f32,
-    y: f32,
-    vertices: [(f32, f32); 3],
-    transform_scale: f32,
-    rot: f32,
-    velocity: (f32, f32),
+    transform: Transform<3>,
+    velocity: Vec2,
     acc: f32,
-    hitbox: [(f32, f32); 4],
+    hitbox: [Vec2; 4],
 }
 
 impl Ship {
     fn update(&mut self, delta_time: f32) {
-        self.x += self.velocity.0 * delta_time;
-        self.y += self.velocity.1 * delta_time;
-        self.hitbox = {
-            let mut res = self.hitbox;
+        self.transform.pos.x += self.velocity.x * delta_time;
+        self.transform.pos.y += self.velocity.y * delta_time;
 
-            res[2] = (
-                self.vertices[0].0 * self.transform_scale / 2.,
-                self.vertices[0].1 * self.transform_scale / 2.,
-            );
-            res[3] = (self.vertices[1].0 * self.transform_scale / 2., res[2].1);
+        self.hitbox[2] = self.transform.vertices[0].clone() * (self.transform.scale / 2.);
 
-            res[0] = (res[2].0, self.vertices[2].1 * self.transform_scale / 2.);
-            res[1] = (res[3].0, res[0].1);
+        self.hitbox[3] = vec2(
+            self.transform.vertices[1].x * self.transform.scale / 2.,
+            self.hitbox[2].y,
+        );
 
-            res.map(|(x, y)| {
-                let (x, y) = rotate(x, y, self.rot);
-                (x + self.x, y + self.y)
-            })
-        };
+        self.hitbox[0] = vec2(
+            self.hitbox[2].x,
+            self.transform.vertices[2].y * self.transform.scale / 2.,
+        );
+
+        self.hitbox[1] = vec2(self.hitbox[3].x, self.hitbox[0].y);
+
+        for v in self.hitbox.iter_mut() {
+            v.rotate_mut(self.transform.rot);
+            *v += &self.transform.pos;
+        }
     }
 }
 
 struct Asteroid {
-    x: f32,
-    y: f32,
-    vertices: [(f32, f32); 4],
-    velocity: (f32, f32),
-    scale: f32,
-    transform: [(f32, f32); 4],
+    transform: Transform<4>,
+    velocity: Vec2,
 }
 
 fn randf32(rng: &mut ThreadRng) -> f32 {
@@ -88,58 +76,55 @@ fn randf32(rng: &mut ThreadRng) -> f32 {
 impl Asteroid {
     fn random(rng: &mut ThreadRng, ship: &Ship) -> Self {
         loop {
-            let velocity = (randf32(rng) * 25., randf32(rng) * 25.);
+            let velocity = vec2(randf32(rng) * 25., randf32(rng) * 25.);
             let mut res = Self {
-                x: if velocity.0 >= 0. {
-                    rng.gen::<f32>() * DANGER_ZONE
-                } else {
-                    CANVAS_WIDTH as f32 - (rng.gen::<f32>() * DANGER_ZONE)
+                transform: Transform {
+                    rot: 0.,
+                    pos: Vec2 {
+                        x: if velocity.x >= 0. {
+                            rng.gen::<f32>() * DANGER_ZONE
+                        } else {
+                            CANVAS_WIDTH as f32 - (rng.gen::<f32>() * DANGER_ZONE)
+                        },
+                        y: if velocity.y >= 0. {
+                            rng.gen::<f32>() * DANGER_ZONE
+                        } else {
+                            CANVAS_HEIGHT as f32 - (rng.gen::<f32>() * DANGER_ZONE)
+                        },
+                    },
+                    vertices: [
+                        vec2(1. - randf32(rng), 1. - randf32(rng)).normalise(),
+                        vec2(1. - randf32(rng), -1. + randf32(rng)).normalise(),
+                        vec2(-1. + randf32(rng), -1. + randf32(rng)).normalise(),
+                        vec2(-1. + randf32(rng), 1. - randf32(rng)).normalise(),
+                    ],
+                    scale: 8. * (rng.gen::<f32>() + 1.),
+                    transform: [Vec2::ZERO, Vec2::ZERO, Vec2::ZERO, Vec2::ZERO],
                 },
-                y: if velocity.1 >= 0. {
-                    rng.gen::<f32>() * DANGER_ZONE
-                } else {
-                    CANVAS_HEIGHT as f32 - (rng.gen::<f32>() * DANGER_ZONE)
-                },
-                vertices: [
-                    normalise(1. - randf32(rng), 1. - randf32(rng)),
-                    normalise(1. - randf32(rng), -1. + randf32(rng)),
-                    normalise(-1. + randf32(rng), -1. + randf32(rng)),
-                    normalise(-1. + randf32(rng), 1. - randf32(rng)),
-                ],
+
                 velocity,
-                scale: 8. * (rng.gen::<f32>() + 1.),
-                transform: [(0., 0.); 4],
             };
 
-            for (i, t) in res.transform.iter_mut().enumerate() {
-                t.0 = res.vertices[i].0 * res.scale + res.x;
-                t.1 = res.vertices[i].1 * res.scale + res.y;
-            }
+            res.transform.apply();
+
             let mut inside_ship = false;
-            inside_ship |= ship.hitbox.iter().any(|(x, y)| res.contains(*x, *y));
-            inside_ship |= res.contains(ship.x, ship.y);
+            inside_ship |= ship.hitbox.iter().any(|Vec2 { x, y }| res.contains(*x, *y));
+            inside_ship |= res.contains(ship.transform.pos.x, ship.transform.pos.y);
             if !inside_ship {
                 return res;
             }
         }
     }
 
-    fn apply_transform(&mut self) {
-        for (i, t) in self.transform.iter_mut().enumerate() {
-            t.0 = self.vertices[i].0 * self.scale + self.x;
-            t.1 = self.vertices[i].1 * self.scale + self.y;
-        }
-    }
-
     fn contains(&self, x: f32, y: f32) -> bool {
         let (mut left, mut right, mut top, mut bottom): (f32, f32, f32, f32) = (
-            self.transform[0].0,
-            self.transform[0].0,
-            self.transform[0].1,
-            self.transform[0].1,
+            self.transform.transform[0].x,
+            self.transform.transform[0].x,
+            self.transform.transform[0].y,
+            self.transform.transform[0].y,
         );
 
-        for (x, y) in self.transform {
+        for &Vec2 { x, y } in self.transform.transform.iter() {
             left = left.min(x);
             right = right.max(x);
             top = top.min(y);
@@ -150,28 +135,45 @@ impl Asteroid {
     }
 }
 
+struct Bullet {
+    pos: Vec2,
+    dir: Vec2,
+    wrap_count: u8
+}
+
+impl Bullet {
+    pub fn new(pos: Vec2, dir: Vec2) -> Self {
+        Self { pos, dir, wrap_count: 0 }
+    }
+}
+
 fn main() {
     let mut rng = rand::thread_rng();
 
     let mut score = 0;
     let mut high_score = 0;
+    let vertices = [
+        vec2(-1., -1.).normalise(),
+        vec2(1., -1.).normalise(),
+        vec2(0., 1.),
+    ];
     let mut ship = Ship {
-        x: CANVAS_WIDTH as f32 / 2.,
-        y: CANVAS_HEIGHT as f32 / 2.,
-        vertices: [normalise(-1., -1.), normalise(1., -1.), (0., 1.)],
-        transform_scale: 10.,
-        rot: 0.,
-        velocity: (0., 0.),
+        transform: Transform {
+            pos: vec2(CANVAS_WIDTH as f32 / 2., CANVAS_HEIGHT as f32 / 2.),
+            vertices: vertices.clone(),
+            scale: 10.,
+            rot: 0.,
+            transform: vertices,
+        },
+        velocity: vec2(0., 0.),
         acc: DEFAULT_ACCELERATION,
-        hitbox: [(0., 0.); 4],
+        hitbox: [vec2(0., 0.), vec2(0., 0.), vec2(0., 0.), vec2(0., 0.)],
     };
     ship.update(0.);
 
     let mut asteroids = vec![Asteroid::random(&mut rng, &ship)];
-    let min_asteroid_spawn_interval = 0.5; // seconds
-    let mut last_asteroid_spawn = Instant::now();
 
-    let mut bullets: Vec<(f32, f32, (f32, f32))> = vec![];
+    let mut bullets: Vec<Bullet> = vec![];
     let mut bullet_cooldown = DEFAULT_BULLET_COOLDOWN; // milliseconds
     let mut last_bullet = Instant::now() - Duration::from_millis(bullet_cooldown);
 
@@ -202,8 +204,7 @@ Controls:
 Tips:
     * The orange-ish zone is the "Danger Zone", asteroids only spawn in the Danger Zone.
     Try to avoid staying inside the Danger Zone or an astroid might spawn close to you (but never inside you).
-    * Your weapon has a pretty long cooldown, only use it when necessary!
-    * Asteroids will spawn faster as you progress.
+    * Your weapon has a cooldown but the cooldown will decrease as you progress!
 
 Good luck!"#
     );
@@ -245,109 +246,124 @@ Good luck!"#
                     }
 
                     if pressed_keys[VirtualKeyCode::Left as usize] {
-                        ship.rot -= 3.5 * delta_time;
+                        ship.transform.rot -= 3.5 * delta_time;
                     }
                     if pressed_keys[VirtualKeyCode::Right as usize] {
-                        ship.rot += 3.5 * delta_time;
+                        ship.transform.rot += 3.5 * delta_time;
                     }
 
-                    let (s, c) = (ship.rot + FRAC_PI_2).sin_cos();
+                    let (s, c) = (ship.transform.rot + FRAC_PI_2).sin_cos();
 
                     let mut moving = false;
                     if pressed_keys[VirtualKeyCode::Up as usize] {
                         moving = true;
-                        ship.velocity.0 += c * ship.acc * delta_time;
-                        ship.velocity.1 += s * ship.acc * delta_time;
+                        ship.velocity.x += c * ship.acc * delta_time;
+                        ship.velocity.y += s * ship.acc * delta_time;
                     }
                     if pressed_keys[VirtualKeyCode::Down as usize] {
                         moving = true;
-                        ship.velocity.0 -= c * ship.acc * delta_time;
-                        ship.velocity.1 -= s * ship.acc * delta_time;
+                        ship.velocity.x -= c * ship.acc * delta_time;
+                        ship.velocity.y -= s * ship.acc * delta_time;
                     }
 
                     let min_vel = 0.75;
                     let acc_mul = 1. / 1.2;
 
                     if !moving {
-                        if ship.velocity.0 >= min_vel {
-                            ship.velocity.0 -= ship.acc * acc_mul * delta_time;
-                        } else if ship.velocity.0 <= -min_vel {
-                            ship.velocity.0 += ship.acc * acc_mul * delta_time;
+                        if ship.velocity.x >= min_vel {
+                            ship.velocity.x -= ship.acc * acc_mul * delta_time;
+                        } else if ship.velocity.x <= -min_vel {
+                            ship.velocity.x += ship.acc * acc_mul * delta_time;
                         } else {
-                            ship.velocity.0 = 0.
+                            ship.velocity.x = 0.
                         }
 
-                        if ship.velocity.1 >= min_vel {
-                            ship.velocity.1 -= ship.acc * acc_mul * delta_time;
-                        } else if ship.velocity.1 <= -min_vel {
-                            ship.velocity.1 += ship.acc * acc_mul * delta_time;
+                        if ship.velocity.y >= min_vel {
+                            ship.velocity.y -= ship.acc * acc_mul * delta_time;
+                        } else if ship.velocity.y <= -min_vel {
+                            ship.velocity.y += ship.acc * acc_mul * delta_time;
                         } else {
-                            ship.velocity.1 = 0.
+                            ship.velocity.y = 0.
                         }
                     }
 
                     ship.update(delta_time);
                     let horizontal_edge = (CANVAS_WIDTH - 1) as f32;
-                    if ship.x < 0. {
-                        ship.x = horizontal_edge;
-                    } else if ship.x > horizontal_edge {
-                        ship.x = 0.
+                    if ship.transform.pos.x < 0. {
+                        ship.transform.pos.x = horizontal_edge;
+                    } else if ship.transform.pos.x > horizontal_edge {
+                        ship.transform.pos.x = 0.
                     }
 
                     let vertical_edge = (CANVAS_HEIGHT - 1) as f32;
-                    if ship.y < 0. {
-                        ship.y = vertical_edge;
-                    } else if ship.y > vertical_edge {
-                        ship.y = 0.
+                    if ship.transform.pos.y < 0. {
+                        ship.transform.pos.y = vertical_edge;
+                    } else if ship.transform.pos.y > vertical_edge {
+                        ship.transform.pos.y = 0.
                     }
 
                     if pressed_keys[VirtualKeyCode::X as usize]
                         && !prev_pressed_keys[VirtualKeyCode::X as usize]
                         && (now - last_bullet).as_millis() as u64 >= bullet_cooldown
                     {
-                        let dir = (ship.rot + FRAC_PI_2).sin_cos();
-                        bullets.push((
-                            ship.x + dir.1 * ship.transform_scale,
-                            ship.y + dir.0 * ship.transform_scale,
-                            dir,
-                        ));
+                        let dir = (ship.transform.rot + FRAC_PI_2).sin_cos();
+                        let dir = vec2(dir.0, dir.1);
+                        bullets.push(Bullet::new(vec2(
+                            ship.transform.pos.x + dir.y * ship.transform.scale,
+                            ship.transform.pos.y + dir.x * ship.transform.scale,
+                        ), dir));
                         last_bullet = now;
                     }
 
-                    bullets.retain_mut(|(x, y, dir)| {
-                        *x += dir.1 * 95. * delta_time;
-                        *y += dir.0 * 95. * delta_time;
+                    bullets.retain_mut(|b| {
+                        b.pos.x += b.dir.y * 155. * delta_time;
+                        b.pos.y += b.dir.x * 155. * delta_time;
+                        if b.pos.x < 0. {
+                            b.pos.x = CANVAS_WIDTH as f32;
+                            b.wrap_count += 1;
+                        } else if b.pos.x > CANVAS_WIDTH as f32 {
+                            b.pos.x = 0.;
+                            b.wrap_count += 1;
+                        }
+                        if b.pos.y < 0. {
+                            b.pos.y = CANVAS_HEIGHT as f32;
+                            b.wrap_count += 1;
+                        } else if b.pos.y > CANVAS_HEIGHT as f32 {
+                            b.pos.y = 0.;
+                            b.wrap_count += 1;
+                        }
 
-                        *x >= 0.
-                            && *x < CANVAS_WIDTH as f32
-                            && *y >= 0.
-                            && *y < CANVAS_HEIGHT as f32
+                        b.wrap_count < 5
                     });
 
-
-                    if (now - last_asteroid_spawn).as_secs_f32() >= (min_asteroid_spawn_interval / ((score + 1) as f32 / 10.)).max(min_asteroid_spawn_interval) {
-                        asteroids.push(Asteroid::random(&mut rng, &ship));
-                        last_asteroid_spawn = now;
+                    if asteroids.len() == 0 {
+                        for _ in 0..4 {
+                            asteroids.push(Asteroid::random(&mut rng, &ship))
+                        }
                     }
 
                     let mut ship_hit = false;
+                    let mut new_asteroids = vec![];
                     asteroids.retain_mut(|asteroid| {
-                        asteroid.x += asteroid.velocity.0 * delta_time;
-                        asteroid.y += asteroid.velocity.1 * delta_time;
-                        asteroid.apply_transform();
+                        asteroid.transform.pos.x += asteroid.velocity.x * delta_time;
+                        asteroid.transform.pos.y += asteroid.velocity.y * delta_time;
+                        asteroid.transform.apply();
 
-                        ship_hit |= ship.hitbox.iter().any(|(x, y)| asteroid.contains(*x, *y));
-                        ship_hit |= asteroid.contains(ship.x, ship.y);
+                        ship_hit |= ship.hitbox.iter().any(| Vec2 {x, y} | asteroid.contains(*x, *y));
+                        ship_hit |= asteroid.contains(ship.transform.pos.x, ship.transform.pos.y);
 
-                        let bullet_hit = bullets.iter_mut().any(|(x, y, _)| {
-                            let res = asteroid.contains(*x, *y);
+                        let mut hit_index = 0;
+
+                        let bullet_hit = bullets.iter_mut().enumerate().any(|(i, b)| {
+                            let res = asteroid.contains(b.pos.x, b.pos.y);
                             if res {
-                                *x = (CANVAS_WIDTH * 2) as f32;
-                                *y = (CANVAS_HEIGHT * 2) as f32;
+                                hit_index = i;
                             }
                             res
                         });
+
                         if bullet_hit {
+                            bullets.swap_remove(hit_index);
                             score += 1;
                             ship.acc += (score as f32) / 32.;
                             if score % 5 == 0 {
@@ -356,14 +372,35 @@ Good luck!"#
                             }
                             // TODO remove later
                             println!("\n[Explosion Sounds] Score: {score}");
+
+                            let n = rng.gen_range(1..=3);
+                            for _ in 0..n {
+                                new_asteroids.push(Asteroid {
+                                    transform: Transform {
+                                        scale: asteroid.transform.scale / ((rng.gen::<f32>() * 2.) + 1.),
+                                        rot: randf32(&mut rng) * PI * 2.,
+                                        ..asteroid.transform.clone()
+                                    },
+                                    velocity: vec2(randf32(&mut rng), randf32(&mut rng)).normalise() * 25.,
+                                });
+                            }
                         }
 
-                        asteroid.x >= 0.
-                            && asteroid.x < CANVAS_WIDTH as f32
-                            && asteroid.y >= 0.
-                            && asteroid.y < CANVAS_HEIGHT as f32
-                            && !bullet_hit
+                        if asteroid.transform.pos.x < 0. {
+                            asteroid.transform.pos.x = CANVAS_WIDTH as f32
+                        } else if asteroid.transform.pos.x > CANVAS_WIDTH as f32 {
+                            asteroid.transform.pos.x = 0.
+                        }
+                        if asteroid.transform.pos.y < 0. {
+                            asteroid.transform.pos.y = CANVAS_HEIGHT as f32
+                        } else if asteroid.transform.pos.y > CANVAS_HEIGHT as f32 {
+                            asteroid.transform.pos.y = 0.
+                        }
+                        
+                        !bullet_hit && asteroid.transform.scale > 3.
                     });
+
+                    asteroids.extend(new_asteroids);
 
                     if ship_hit {
                         high_score = high_score.max(score);
@@ -371,15 +408,14 @@ Good luck!"#
                         println!("\n[Ship Explosion] You crashed! Score: {score}, High Score: {high_score}");
                         asteroids.clear();
                         asteroids.push(Asteroid::random(&mut rng, &ship));
-                        last_asteroid_spawn = now;
                         bullets.clear();
                         bullet_cooldown = DEFAULT_BULLET_COOLDOWN;
                         last_bullet = now - Duration::from_millis(bullet_cooldown);
-                        ship.x = (CANVAS_WIDTH / 2) as f32;
-                        ship.y = (CANVAS_HEIGHT / 2) as f32;
+                        ship.transform.pos.x = (CANVAS_WIDTH / 2) as f32;
+                        ship.transform.pos.y = (CANVAS_HEIGHT / 2) as f32;
                         ship.acc = DEFAULT_ACCELERATION;
-                        ship.velocity = (0., 0.);
-                        ship.rot = FRAC_PI_2 * 2.;
+                        ship.velocity = vec2(0., 0.);
+                        ship.transform.rot = FRAC_PI_2 * 2.;
                         score = 0;
                     }
 
@@ -415,51 +451,41 @@ Good luck!"#
                     canvas.rect(CANVAS_WIDTH - DANGER_ZONE as usize, 0, DANGER_ZONE as usize, CANVAS_HEIGHT, &danger_zone_color);
 
                     for asteroid in &asteroids {
-                        for (i, v) in asteroid.transform.iter().enumerate() {
+                        for (i, v) in asteroid.transform.transform.iter().enumerate() {
                             if i > 0 {
                                 canvas.line(
-                                    v.0 as usize,
-                                    v.1 as usize,
-                                    asteroid.transform[i - 1].0 as usize,
-                                    asteroid.transform[i - 1].1 as usize,
+                                    v.x as usize,
+                                    v.y as usize,
+                                    asteroid.transform.transform[i - 1].x as usize,
+                                    asteroid.transform.transform[i - 1].y as usize,
                                     &GREEN,
                                 )
                             } else {
-                                let len = asteroid.transform.len();
+                                let len = asteroid.transform.transform.len();
                                 canvas.line(
-                                    v.0 as usize,
-                                    v.1 as usize,
-                                    asteroid.transform[len - 1].0 as usize,
-                                    asteroid.transform[len - 1].1 as usize,
+                                    v.x as usize,
+                                    v.y as usize,
+                                    asteroid.transform.transform[len - 1].x as usize,
+                                    asteroid.transform.transform[len - 1].y as usize,
                                     &GREEN,
                                 )
                             }
                         }
                     }
-
-                    let ship_transform = ship.vertices.map(|(x, y)| {
-                        let (x, y) = rotate(x, y, ship.rot);
-
-                        let (x, y) = (
-                            x * ship.transform_scale + ship.x,
-                            y * ship.transform_scale + ship.y,
-                        );
-                        // (x as usize, y as usize)
-                        (x as usize, y as usize)
-                    });
-                    for (x0, y0) in ship_transform {
-                        for (x1, y1) in ship_transform {
-                            canvas.line(x0, y0, x1, y1, &RED);
+                    ship.transform.apply();
+                    for &Vec2 { x: x0, y: y0 } in ship.transform.transform.iter() {
+                        for &Vec2 { x: x1, y: y1 } in ship.transform.transform.iter() {
+                            canvas.line(x0 as usize, y0 as usize, x1 as usize, y1 as usize, &RED);
                         }
                     }
 
-                    for (x, y, _) in &bullets {
-                        canvas.put(*x as usize, *y as usize, &BLUE)
+                    for Bullet { pos, .. } in bullets.iter() {
+                        canvas.put(pos.x as usize, pos.y as usize, &BULLET_COLOR)
                     }
 
                     if show_hitbox {
-                        for (x0, y0) in ship.hitbox {
-                            for (x1, y1) in ship.hitbox {
+                        for &Vec2 { x: x0, y: y0 } in ship.hitbox.iter() {
+                            for &Vec2 { x: x1, y: y1 } in ship.hitbox.iter() {
                                 canvas.line(
                                     x0 as usize,
                                     y0 as usize,
