@@ -446,27 +446,27 @@ Good luck!"#
 
                     let danger_zone_color = RGBu32::Rgb(40, 15, 0);
                     canvas.rect(0, 0, CANVAS_WIDTH, DANGER_ZONE as usize, &danger_zone_color);
-                    canvas.rect(0, CANVAS_HEIGHT - DANGER_ZONE as usize, CANVAS_WIDTH, DANGER_ZONE as usize, &danger_zone_color);
+                    canvas.rect(0, CANVAS_HEIGHT as i32 - DANGER_ZONE as i32, CANVAS_WIDTH, DANGER_ZONE as usize, &danger_zone_color);
                     canvas.rect(0, 0, DANGER_ZONE as usize, CANVAS_HEIGHT, &danger_zone_color);
-                    canvas.rect(CANVAS_WIDTH - DANGER_ZONE as usize, 0, DANGER_ZONE as usize, CANVAS_HEIGHT, &danger_zone_color);
+                    canvas.rect(CANVAS_WIDTH as i32 - DANGER_ZONE as i32, 0, DANGER_ZONE as usize, CANVAS_HEIGHT, &danger_zone_color);
 
                     for asteroid in &asteroids {
                         for (i, v) in asteroid.transform.transform.iter().enumerate() {
                             if i > 0 {
                                 canvas.line(
-                                    v.x as usize,
-                                    v.y as usize,
-                                    asteroid.transform.transform[i - 1].x as usize,
-                                    asteroid.transform.transform[i - 1].y as usize,
+                                    v.x as i32,
+                                    v.y as i32,
+                                    asteroid.transform.transform[i - 1].x as i32,
+                                    asteroid.transform.transform[i - 1].y as i32,
                                     &GREEN,
                                 )
                             } else {
                                 let len = asteroid.transform.transform.len();
                                 canvas.line(
-                                    v.x as usize,
-                                    v.y as usize,
-                                    asteroid.transform.transform[len - 1].x as usize,
-                                    asteroid.transform.transform[len - 1].y as usize,
+                                    v.x as i32,
+                                    v.y as i32,
+                                    asteroid.transform.transform[len - 1].x as i32,
+                                    asteroid.transform.transform[len - 1].y as i32,
                                     &GREEN,
                                 )
                             }
@@ -475,22 +475,22 @@ Good luck!"#
                     ship.transform.apply();
                     for &Vec2 { x: x0, y: y0 } in ship.transform.transform.iter() {
                         for &Vec2 { x: x1, y: y1 } in ship.transform.transform.iter() {
-                            canvas.line(x0 as usize, y0 as usize, x1 as usize, y1 as usize, &RED);
+                            canvas.line(x0 as i32, y0 as i32, x1 as i32, y1 as i32, &RED);
                         }
                     }
 
                     for Bullet { pos, .. } in bullets.iter() {
-                        canvas.put(pos.x as usize, pos.y as usize, &BULLET_COLOR)
+                        canvas.put(pos.x as i32, pos.y as i32, &BULLET_COLOR)
                     }
 
                     if show_hitbox {
                         for &Vec2 { x: x0, y: y0 } in ship.hitbox.iter() {
                             for &Vec2 { x: x1, y: y1 } in ship.hitbox.iter() {
                                 canvas.line(
-                                    x0 as usize,
-                                    y0 as usize,
-                                    x1 as usize,
-                                    y1 as usize,
+                                    x0 as i32,
+                                    y0 as i32,
+                                    x1 as i32,
+                                    y1 as i32,
                                     &YELLOW,
                                 );
                             }
