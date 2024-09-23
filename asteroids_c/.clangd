@@ -1,0 +1,2 @@
+ CompileFlags:
+ 	Add: [-Iexternal\raylib\include\,-std=c99,-Wall,-pedantic]
