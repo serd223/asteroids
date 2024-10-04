@@ -25,7 +25,7 @@ typedef struct {
 typedef struct {
   Vector2* vertices;
   uint32_t vertex_count;
-  Vector2* pos;
+  Vector2 pos;
   float rot;
   float scale;
   Vector2* transform;
